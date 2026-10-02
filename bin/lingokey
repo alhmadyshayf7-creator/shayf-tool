@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from lingokey_core import *  # noqa: E402,F403
+
+
+def print_suggestions(items):
+    if not items:
+        print("No safe suggestion matched this output.")
+        return
+    for i, s in enumerate(items, 1):
+        print(f"\n[{i}] {s.command}")
+        print(f"  What: {s.what}")
+        print(f"  Why:  {s.why}")
+        print(f"  Impact: {s.impact}")
+        print(f"  Risk: {s.risk}")
+
+
+def main() -> int:
+    ensure_home()
+    p = argparse.ArgumentParser(prog="lingokey", description="LingoKey for Kali Linux")
+    sp = p.add_subparsers(dest="cmd", required=True)
+    sp.add_parser("on"); sp.add_parser("off"); sp.add_parser("toggle"); sp.add_parser("status")
+    q = sp.add_parser("detect"); q.add_argument("text")
+    q = sp.add_parser("translate"); q.add_argument("text"); q.add_argument("--to", choices=["ar", "en"])
+    q = sp.add_parser("keyfix"); q.add_argument("text"); q.add_argument("--direction", choices=["auto", "ar2en", "en2ar"], default="auto")
+    q = sp.add_parser("dict-add"); q.add_argument("source"); q.add_argument("target")
+    q = sp.add_parser("analyze"); q.add_argument("text")
+    sp.add_parser("doctor")
+    sp.add_parser("install-hotkey")
+
+    args = p.parse_args()
+    if args.cmd == "on": set_enabled(True); print("LingoKey: ON")
+    elif args.cmd == "off": set_enabled(False); print("LingoKey: OFF")
+    elif args.cmd == "toggle": set_enabled(not is_enabled()); print("LingoKey:", "ON" if is_enabled() else "OFF")
+    elif args.cmd == "status": print("ON" if is_enabled() else "OFF")
+    elif args.cmd == "detect": print(detect_language(args.text))
+    elif args.cmd == "translate": print(translate(args.text, args.to))
+    elif args.cmd == "keyfix": print(keyboard_fix(args.text, args.direction))
+    elif args.cmd == "dict-add": add_dictionary(args.source, args.target); print("Added to personal dictionary.")
+    elif args.cmd == "analyze":
+        print_suggestions(ai_suggest(args.text))
+    elif args.cmd == "doctor":
+        print("LingoKey doctor")
+        print("  Python:", sys.version.split()[0])
+        print("  Enabled:", is_enabled())
+        print("  Argos:", end=" ")
+        try:
+            import argostranslate.translate  # noqa: F401
+            print("installed")
+        except Exception:
+            print("not installed (optional)")
+        print("  Ollama:", "installed" if shutil.which("ollama") else "not installed (optional)")
+    elif args.cmd == "install-hotkey":
+        script = Path.home() / ".xbindkeysrc"
+        block = '"lingokey toggle"\n  control + alt + space\n'
+        old = script.read_text(encoding="utf-8") if script.exists() else ""
+        if "lingokey toggle" not in old:
+            script.write_text(old.rstrip() + "\n\n# LingoKey\n" + block, encoding="utf-8")
+        print(script)
+        print("On X11, install xbindkeys and start it once: xbindkeys")
+    return 0
+
+if __name__ == "__main__": raise SystemExit(main())
